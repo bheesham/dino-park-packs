@@ -449,7 +449,7 @@ use diesel::pg::Pg;
 use diesel::sql_types::Text;
 use serde_json::json;
 
-diesel_infix_operator!(ExtrPath, " #> ", Jsonb, backend: Pg);
+diesel::infix_operator!(ExtrPath, " #> ", Jsonb, backend: Pg);
 
 fn extr_path<T, U>(left: T, right: U) -> ExtrPath<T, U>
 where
