@@ -28,7 +28,7 @@ pub struct Terms {
     pub text: String,
 }
 
-#[derive(Identifiable, Queryable, Associations, PartialEq, Eq, Debug)]
+#[derive(Identifiable, Queryable, PartialEq, Eq, Debug)]
 pub struct Role {
     pub id: i32,
     pub group_id: i32,
