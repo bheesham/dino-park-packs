@@ -27,9 +27,9 @@ async fn expire_membership(
     user: &User,
     memberships: Vec<Membership>,
 ) -> Result<(), Error> {
-    let connection = pool.get()?;
+    let mut connection = pool.get()?;
     let groups = internal::group::get_groups_by_ids(
-        &connection,
+        &mut connection,
         &memberships.iter().map(|m| m.group_id).collect::<Vec<i32>>(),
     )?;
     let group_names = groups.iter().map(|g| g.name.as_str()).collect::<Vec<_>>();
@@ -55,9 +55,9 @@ pub async fn expire_memberships(
     cis_client: Arc<impl AsyncCisClientTrait>,
 ) -> Result<(), Error> {
     let expires_before = Utc::now().naive_utc();
-    let connection = pool.get()?;
+    let mut connection = pool.get()?;
     let memberships =
-        internal::member::get_memberships_expired_before(&connection, expires_before)?;
+        internal::member::get_memberships_expired_before(&mut connection, expires_before)?;
     drop(connection);
     let memberships = memberships.into_iter().fold(
         HashMap::new(),
@@ -96,8 +96,9 @@ pub fn expiration_notification(pool: &Pool, first: bool) -> Result<usize, Error>
         .date()
         .and_hms_nano(23, 59, 59, 999_999_999)
         .naive_utc();
-    let connection = pool.get()?;
-    let memberships = internal::member::get_memberships_expire_between(&connection, lower, upper)?;
+    let mut connection = pool.get()?;
+    let memberships =
+        internal::member::get_memberships_expire_between(&mut connection, lower, upper)?;
     info!(
         "{} memberships expiring in {} days ({}-{})",
         memberships.len(),
@@ -107,15 +108,17 @@ pub fn expiration_notification(pool: &Pool, first: bool) -> Result<usize, Error>
     );
     let mut count = 0;
     for membership in memberships {
-        let group = internal::group::get_group_by_id(&connection, membership.group_id)?
+        let group = internal::group::get_group_by_id(&mut connection, membership.group_id)?
             .ok_or(PacksError::InvalidGroupData)?;
-        let host = internal::user::slim_user_profile_by_uuid(&connection, &membership.added_by)?;
+        let host =
+            internal::user::slim_user_profile_by_uuid(&mut connection, &membership.added_by)?;
         let host_valid =
-            match internal::member::role_for(&connection, &host.user_uuid, &group.name)? {
+            match internal::member::role_for(&mut connection, &host.user_uuid, &group.name)? {
                 Some(r) => r.typ != RoleType::Member,
                 None => false,
             } && !host.email.is_empty();
-        let user = internal::user::slim_user_profile_by_uuid(&connection, &membership.user_uuid)?;
+        let user =
+            internal::user::slim_user_profile_by_uuid(&mut connection, &membership.user_uuid)?;
         if first {
             if host_valid {
                 send_email(
@@ -123,7 +126,7 @@ pub fn expiration_notification(pool: &Pool, first: bool) -> Result<usize, Error>
                     &Template::FirstHostExpiration(group.name, user.username),
                 );
             } else {
-                let bcc = internal::member::get_curator_emails(&connection, group.id)?;
+                let bcc = internal::member::get_curator_emails(&mut connection, group.id)?;
                 send_emails(
                     bcc,
                     &Template::FirstHostExpiration(group.name, user.username),
@@ -136,7 +139,7 @@ pub fn expiration_notification(pool: &Pool, first: bool) -> Result<usize, Error>
                     &Template::SecondHostExpiration(group.name.clone(), user.username),
                 );
             } else {
-                let bcc = internal::member::get_curator_emails(&connection, group.id)?;
+                let bcc = internal::member::get_curator_emails(&mut connection, group.id)?;
                 send_emails(
                     bcc,
                     &Template::SecondHostExpiration(group.name.clone(), user.username),
@@ -150,15 +153,15 @@ pub fn expiration_notification(pool: &Pool, first: bool) -> Result<usize, Error>
 }
 
 pub fn expire_invitations(pool: &Pool) -> Result<(), Error> {
-    let connection = pool.get()?;
+    let mut connection = pool.get()?;
     let expires_before = Utc::now().naive_utc();
-    internal::invitation::expire_before(&connection, expires_before)?;
+    internal::invitation::expire_before(&mut connection, expires_before)?;
     Ok(())
 }
 
 pub fn expire_requests(pool: &Pool) -> Result<(), Error> {
-    let connection = pool.get()?;
+    let mut connection = pool.get()?;
     let expires_before = Utc::now().naive_utc();
-    internal::request::expire_before(&connection, expires_before)?;
+    internal::request::expire_before(&mut connection, expires_before)?;
     Ok(())
 }

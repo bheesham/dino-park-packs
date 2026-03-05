@@ -35,9 +35,9 @@ pub fn delete_invitation(
         group_name,
         &host.user_uuid,
     ))?;
-    let connection = pool.get()?;
-    delete(&connection, group_name, host, member, None)?;
-    let p = internal::user::slim_user_profile_by_uuid(&connection, &member.user_uuid)?;
+    let mut connection = pool.get()?;
+    delete(&mut connection, group_name, host, member, None)?;
+    let p = internal::user::slim_user_profile_by_uuid(&mut connection, &member.user_uuid)?;
     send_email(p.email, &Template::DeleteInvitation(group_name.to_owned()));
     Ok(())
 }
@@ -47,9 +47,9 @@ pub fn reject_invitation(
     scope_and_user: &ScopeAndUser,
     group_name: &str,
 ) -> Result<(), Error> {
-    let connection = pool.get()?;
-    let user = internal::user::user_by_id(&connection, &scope_and_user.user_id)?;
-    delete(&connection, group_name, User::default(), user, None)
+    let mut connection = pool.get()?;
+    let user = internal::user::user_by_id(&mut connection, &scope_and_user.user_id)?;
+    delete(&mut connection, group_name, User::default(), user, None)
 }
 
 pub fn update_invitation(
@@ -68,9 +68,9 @@ pub fn update_invitation(
         &host.user_uuid,
         &member.user_uuid,
     ))?;
-    let connection = pool.get()?;
+    let mut connection = pool.get()?;
     update(
-        &connection,
+        &mut connection,
         group_name,
         host,
         member,
@@ -96,26 +96,26 @@ pub fn invite_member(
         &host.user_uuid,
         &member.user_uuid,
     ))?;
-    let connection = pool.get()?;
+    let mut connection = pool.get()?;
     // delete the pending request if it exists
     internal::request::delete(
-        &connection,
+        &mut connection,
         group_name,
         Some(host),
         &member,
         log_comment_body("invited"),
     )?;
     invite(
-        &connection,
+        &mut connection,
         group_name,
         host,
         member,
         invitation_expiration,
         group_expiration,
     )?;
-    let p = internal::user::slim_user_profile_by_uuid(&connection, &member.user_uuid)?;
+    let p = internal::user::slim_user_profile_by_uuid(&mut connection, &member.user_uuid)?;
     if let Ok(Some(invitation_text)) =
-        internal::invitation::get_invitation_text(&connection, group_name)
+        internal::invitation::get_invitation_text(&mut connection, group_name)
     {
         send_email(
             p.email,
@@ -139,8 +139,8 @@ pub fn pending_invitations_count(
         group_name,
         &host.user_uuid,
     ))?;
-    let connection = pool.get()?;
-    pending_count(&connection, group_name)
+    let mut connection = pool.get()?;
+    pending_count(&mut connection, group_name)
 }
 
 pub fn pending_invitations(
@@ -155,13 +155,15 @@ pub fn pending_invitations(
         group_name,
         &host.user_uuid,
     ))?;
-    let connection = pool.get()?;
+    let mut connection = pool.get()?;
     match scope_and_user.scope {
-        Trust::Staff => staff_scoped_invitations_and_host(&connection, group_name),
-        Trust::Ndaed => ndaed_scoped_invitations_and_host(&connection, group_name),
-        Trust::Vouched => vouched_scoped_invitations_and_host(&connection, group_name),
-        Trust::Authenticated => authenticated_scoped_invitations_and_host(&connection, group_name),
-        Trust::Public => public_scoped_invitations_and_host(&connection, group_name),
+        Trust::Staff => staff_scoped_invitations_and_host(&mut connection, group_name),
+        Trust::Ndaed => ndaed_scoped_invitations_and_host(&mut connection, group_name),
+        Trust::Vouched => vouched_scoped_invitations_and_host(&mut connection, group_name),
+        Trust::Authenticated => {
+            authenticated_scoped_invitations_and_host(&mut connection, group_name)
+        }
+        Trust::Public => public_scoped_invitations_and_host(&mut connection, group_name),
     }
 }
 
@@ -169,16 +171,16 @@ pub fn pending_invitations_for_user(
     pool: &Pool,
     scope_and_user: &ScopeAndUser,
 ) -> Result<Vec<DisplayInvitationForUser>, Error> {
-    let connection = pool.get()?;
-    let user = internal::user::user_by_id(&connection, &scope_and_user.user_id)?;
+    let mut connection = pool.get()?;
+    let user = internal::user::user_by_id(&mut connection, &scope_and_user.user_id)?;
     match scope_and_user.scope {
-        Trust::Staff => staff_scoped_invitations_and_host_for_user(&connection, &user),
-        Trust::Ndaed => ndaed_scoped_invitations_and_host_for_user(&connection, &user),
-        Trust::Vouched => vouched_scoped_invitations_and_host_for_user(&connection, &user),
+        Trust::Staff => staff_scoped_invitations_and_host_for_user(&mut connection, &user),
+        Trust::Ndaed => ndaed_scoped_invitations_and_host_for_user(&mut connection, &user),
+        Trust::Vouched => vouched_scoped_invitations_and_host_for_user(&mut connection, &user),
         Trust::Authenticated => {
-            authenticated_scoped_invitations_and_host_for_user(&connection, &user)
+            authenticated_scoped_invitations_and_host_for_user(&mut connection, &user)
         }
-        Trust::Public => public_scoped_invitations_and_host_for_user(&connection, &user),
+        Trust::Public => public_scoped_invitations_and_host_for_user(&mut connection, &user),
     }
 }
 
@@ -195,12 +197,12 @@ pub async fn accept_invitation(
         group_name,
         &Uuid::default(),
     ))?;
-    let connection = pool.get()?;
-    let user_profile = internal::user::slim_user_profile_by_uuid(&connection, &user.user_uuid)?;
+    let mut connection = pool.get()?;
+    let user_profile = internal::user::slim_user_profile_by_uuid(&mut connection, &user.user_uuid)?;
     if group_name == "nda" {
         subscribe_nda(&user_profile.email)
     }
-    accept(&connection, group_name, user)?;
+    accept(&mut connection, group_name, user)?;
     drop(connection);
     send_groups_to_cis(pool, cis_client, &user.user_uuid).await
 }
@@ -218,9 +220,9 @@ pub fn set_invitation_email(
         group_name,
         &host.user_uuid,
     ))?;
-    let connection = pool.get()?;
+    let mut connection = pool.get()?;
     update_invitation_text(
-        &connection,
+        &mut connection,
         group_name,
         host,
         invitation_email.body.unwrap_or_default(),
@@ -242,8 +244,8 @@ pub fn get_invitation_email(
         group_name,
         &host.user_uuid,
     ))?;
-    let connection = pool.get()?;
-    get_invitation_text(&connection, group_name).map(|invitation_text| InvitationEmail {
+    let mut connection = pool.get()?;
+    get_invitation_text(&mut connection, group_name).map(|invitation_text| InvitationEmail {
         body: invitation_text.map(|t| t.body),
     })
 }

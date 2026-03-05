@@ -28,12 +28,12 @@ pub async fn add_admin(
         &host.user_uuid,
         &user.user_uuid,
     ))?;
-    let connection = pool.get()?;
-    let user_profile = internal::user::slim_user_profile_by_uuid(&connection, &user.user_uuid)?;
+    let mut connection = pool.get()?;
+    let user_profile = internal::user::slim_user_profile_by_uuid(&mut connection, &user.user_uuid)?;
     if group_name == "nda" {
         subscribe_nda(&user_profile.email)
     }
-    internal::admin::add_admin(&connection, group_name, host, user)?;
+    internal::admin::add_admin(&mut connection, group_name, host, user)?;
     drop(connection);
     send_groups_to_cis(pool, cis_client, &user.user_uuid).await
 }
@@ -52,17 +52,17 @@ pub fn demote(
         group_name,
         &host.user_uuid,
     ))?;
-    let connection = pool.get()?;
-    if !internal::admin::is_last_admin(&connection, group_name, &user.user_uuid)? {
+    let mut connection = pool.get()?;
+    if !internal::admin::is_last_admin(&mut connection, group_name, &user.user_uuid)? {
         internal::admin::demote_to_member(
             &host.user_uuid,
-            &connection,
+            &mut connection,
             group_name,
             user,
             expiration,
         )
         .map(|_| ())?;
-        let user = internal::user::slim_user_profile_by_uuid(&connection, &user.user_uuid)?;
+        let user = internal::user::slim_user_profile_by_uuid(&mut connection, &user.user_uuid)?;
         send_email(user.email, &Template::DemoteCurator(group_name.to_owned()));
         Ok(())
     } else {

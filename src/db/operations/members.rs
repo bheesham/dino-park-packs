@@ -43,21 +43,21 @@ pub fn membership_and_scoped_host(
     scope_and_user: &ScopeAndUser,
     group_name: &str,
 ) -> Result<Option<DisplayMembershipAndHost>, Error> {
-    let connection = pool.get()?;
-    let user = internal::user::user_by_id(&connection, &scope_and_user.user_id)?;
-    let group = internal::group::get_group(&connection, group_name)?;
+    let mut connection = pool.get()?;
+    let user = internal::user::user_by_id(&mut connection, &scope_and_user.user_id)?;
+    let group = internal::group::get_group(&mut connection, group_name)?;
     match scope_and_user.scope {
         Trust::Staff => {
-            internal::member::membership_and_staff_host(&connection, group.id, user.user_uuid)
+            internal::member::membership_and_staff_host(&mut connection, group.id, user.user_uuid)
         }
         Trust::Ndaed => {
-            internal::member::membership_and_ndaed_host(&connection, group.id, user.user_uuid)
+            internal::member::membership_and_ndaed_host(&mut connection, group.id, user.user_uuid)
         }
         Trust::Vouched => {
-            internal::member::membership_and_vouched_host(&connection, group.id, user.user_uuid)
+            internal::member::membership_and_vouched_host(&mut connection, group.id, user.user_uuid)
         }
         Trust::Authenticated => internal::member::membership_and_authenticated_host(
-            &connection,
+            &mut connection,
             group.id,
             user.user_uuid,
         ),
@@ -71,11 +71,11 @@ pub fn scoped_members_and_host(
     scope_and_user: &ScopeAndUser,
     options: MembersQueryOptions,
 ) -> Result<PaginatedDisplayMembersAndHost, Error> {
-    let connection = pool.get()?;
-    let group = internal::group::get_group(&connection, group_name)?;
+    let mut connection = pool.get()?;
+    let group = internal::group::get_group(&mut connection, group_name)?;
     let curator = if options.privileged {
-        let user = internal::user::user_by_id(&connection, &scope_and_user.user_id)?;
-        internal::member::role_for(&connection, &user.user_uuid, group_name)?
+        let user = internal::user::user_by_id(&mut connection, &scope_and_user.user_id)?;
+        internal::member::role_for(&mut connection, &user.user_uuid, group_name)?
             .map(|r| r.typ == RoleType::Admin || r.typ == RoleType::Curator)
             .unwrap_or_default()
     } else {
@@ -84,32 +84,36 @@ pub fn scoped_members_and_host(
     match &scope_and_user.scope {
         Trust::Staff if options.privileged && curator => {
             internal::member::privileged_staff_scoped_members_and_host(
-                &connection,
+                &mut connection,
                 group.id,
                 options,
             )
         }
         Trust::Staff => {
-            internal::member::staff_scoped_members_and_host(&connection, group.id, options)
+            internal::member::staff_scoped_members_and_host(&mut connection, group.id, options)
         }
         Trust::Ndaed => {
-            internal::member::ndaed_scoped_members_and_host(&connection, group.id, options)
+            internal::member::ndaed_scoped_members_and_host(&mut connection, group.id, options)
         }
-        Trust::Vouched => internal::member::vouched_scoped_members(&connection, group.id, options),
+        Trust::Vouched => {
+            internal::member::vouched_scoped_members(&mut connection, group.id, options)
+        }
         Trust::Authenticated => {
-            internal::member::authenticated_scoped_members(&connection, group.id, options)
+            internal::member::authenticated_scoped_members(&mut connection, group.id, options)
         }
-        Trust::Public => internal::member::public_scoped_members(&connection, group.id, options),
+        Trust::Public => {
+            internal::member::public_scoped_members(&mut connection, group.id, options)
+        }
     }
 }
 
 pub fn member_count(pool: &Pool, group_name: &str) -> Result<i64, Error> {
-    let connection = pool.get()?;
+    let mut connection = pool.get()?;
     let count = schema::memberships::table
         .inner_join(groups::groups)
         .filter(groups::name.eq(group_name))
         .select(count(schema::memberships::user_uuid))
-        .first(&connection)?;
+        .first(&mut connection)?;
     Ok(count)
 }
 
@@ -120,19 +124,19 @@ pub fn renewal_count(
 ) -> Result<i64, Error> {
     let expires_before = expires_before
         .unwrap_or_else(|| (Utc::now() + chrono::Duration::days(DEFAULT_RENEWAL_DAYS)).naive_utc());
-    let connection = pool.get()?;
+    let mut connection = pool.get()?;
     let count = schema::memberships::table
         .inner_join(groups::groups)
         .filter(groups::name.eq(group_name))
         .filter(schema::memberships::expiration.le(expires_before))
         .select(count(schema::memberships::user_uuid))
-        .first(&connection)?;
+        .first(&mut connection)?;
     Ok(count)
 }
 
 fn db_leave(
     host_uuid: &Uuid,
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     group_name: &str,
     user: &User,
     force: bool,
@@ -152,8 +156,8 @@ pub async fn transfer(
     new_user: &User,
     cis_client: Arc<impl AsyncCisClientTrait>,
 ) -> Result<(), Error> {
-    let connection = pool.get()?;
-    let host = internal::user::user_by_id(&connection, &scope_and_user.user_id)?;
+    let mut connection = pool.get()?;
+    let host = internal::user::user_by_id(&mut connection, &scope_and_user.user_id)?;
     ADMIN_CAN_ADD_MEMBER.run(&RuleContext::minimal_with_member_uuid(
         &pool.clone(),
         scope_and_user,
@@ -161,12 +165,12 @@ pub async fn transfer(
         &host.user_uuid,
         &new_user.user_uuid,
     ))?;
-    internal::member::transfer_membership(&connection, group_name, &host, old_user, new_user)?;
+    internal::member::transfer_membership(&mut connection, group_name, &host, old_user, new_user)?;
     if group_name == "nda" {
         let old_user_profile =
-            internal::user::slim_user_profile_by_uuid(&connection, &old_user.user_uuid)?;
+            internal::user::slim_user_profile_by_uuid(&mut connection, &old_user.user_uuid)?;
         let new_user_profile =
-            internal::user::slim_user_profile_by_uuid(&connection, &old_user.user_uuid)?;
+            internal::user::slim_user_profile_by_uuid(&mut connection, &old_user.user_uuid)?;
         unsubscribe_nda(old_user_profile.email);
         subscribe_nda(new_user_profile.email);
     }
@@ -191,14 +195,14 @@ pub async fn add(
         &host.user_uuid,
         &user.user_uuid,
     ))?;
-    let connection = pool.get()?;
+    let mut connection = pool.get()?;
     let expiration = if expiration.is_none() {
-        internal::group::get_group(&connection, group_name)?.group_expiration
+        internal::group::get_group(&mut connection, group_name)?.group_expiration
     } else {
         expiration
     };
-    internal::member::add_to_group(&connection, group_name, host, user, expiration)?;
-    let user_profile = internal::user::slim_user_profile_by_uuid(&connection, &user.user_uuid)?;
+    internal::member::add_to_group(&mut connection, group_name, host, user, expiration)?;
+    let user_profile = internal::user::slim_user_profile_by_uuid(&mut connection, &user.user_uuid)?;
     if group_name == "nda" {
         subscribe_nda(&user_profile.email)
     }
@@ -213,8 +217,8 @@ pub async fn remove_members_silent(
     members: &[User],
     cis_client: Arc<impl AsyncCisClientTrait>,
 ) -> Result<(), Error> {
-    let connection = pool.get()?;
-    let host = internal::user::user_by_id(&connection, &scope_and_user.user_id)?;
+    let mut connection = pool.get()?;
+    let host = internal::user::user_by_id(&mut connection, &scope_and_user.user_id)?;
     REMOVE_MEMBER.run(&RuleContext::minimal(
         pool,
         scope_and_user,
@@ -260,23 +264,26 @@ pub async fn revoke_memberships_by_trust<'a>(
     cis_client: Arc<impl AsyncCisClientTrait>,
     comment: Option<Value>,
 ) -> Result<(), Error> {
-    let connection = pool.get()?;
+    let mut connection = pool.get()?;
 
     let comment = add_to_comment_body("reason", "trust revoked", comment);
-    for invited in
-        internal::invitation::invited_groups_for_user(&connection, &remove_groups.user.user_uuid)?
-            .iter()
-            .filter(|i| trust < i.trust)
+    for invited in internal::invitation::invited_groups_for_user(
+        &mut connection,
+        &remove_groups.user.user_uuid,
+    )?
+    .iter()
+    .filter(|i| trust < i.trust)
     {
         internal::invitation::delete(
-            &connection,
+            &mut connection,
             &invited.name,
             *host,
             remove_groups.user,
             comment.clone(),
         )?;
     }
-    let all_groups = internal::group::groups_for_user(&connection, &remove_groups.user.user_uuid)?;
+    let all_groups =
+        internal::group::groups_for_user(&mut connection, &remove_groups.user.user_uuid)?;
     let mut revoked_groups = all_groups
         .iter()
         .filter(|g| trust < g.trust)
@@ -298,9 +305,9 @@ pub async fn revoke_membership<'a>(
     cis_client: Arc<impl AsyncCisClientTrait>,
     comment: Option<Value>,
 ) -> Result<(), Error> {
-    let connection = pool.get()?;
-    let is_staff =
-        internal::user::user_trust(&connection, &remove_groups.user.user_uuid)? == TrustType::Staff;
+    let mut connection = pool.get()?;
+    let is_staff = internal::user::user_trust(&mut connection, &remove_groups.user.user_uuid)?
+        == TrustType::Staff;
     // are we dropping nda membership -> remove according groups and invitations
     if remove_groups
         .group_names
@@ -308,7 +315,7 @@ pub async fn revoke_membership<'a>(
         .any(|group_name| *group_name == "nda")
     {
         let user_profile =
-            internal::user::user_profile_by_uuid(&connection, &remove_groups.user.user_uuid)?;
+            internal::user::user_profile_by_uuid(&mut connection, &remove_groups.user.user_uuid)?;
         unsubscribe_nda(user_profile.email);
     }
     if remove_groups
@@ -350,13 +357,13 @@ async fn _revoke_membership<'a>(
         return Ok(());
     }
     let exit_on_error = group_names.len() == 1;
-    let connection = pool.get()?;
+    let mut connection = pool.get()?;
     let user_profile_slim =
-        internal::user::slim_user_profile_by_uuid(&connection, &user.user_uuid)?;
+        internal::user::slim_user_profile_by_uuid(&mut connection, &user.user_uuid)?;
     for group_name in group_names {
         if let Err(e) = db_leave(
             &host.user_uuid,
-            &connection,
+            &mut connection,
             group_name,
             &user,
             force,
@@ -438,8 +445,8 @@ pub async fn leave(
     force: bool,
     cis_client: Arc<impl AsyncCisClientTrait>,
 ) -> Result<(), Error> {
-    let connection = pool.get()?;
-    let user = internal::user::user_by_id(&connection, &scope_and_user.user_id)?;
+    let mut connection = pool.get()?;
+    let user = internal::user::user_by_id(&mut connection, &scope_and_user.user_id)?;
     let host = User::default();
     let remove_groups = RemoveGroups {
         user,
@@ -465,9 +472,15 @@ pub fn renew(
         &host.user_uuid,
         &user.user_uuid,
     ))?;
-    let connection = pool.get()?;
+    let mut connection = pool.get()?;
 
-    internal::member::renew(&host.user_uuid, &connection, group_name, user, expiration)
+    internal::member::renew(
+        &host.user_uuid,
+        &mut connection,
+        group_name,
+        user,
+        expiration,
+    )
 }
 
 pub fn role_for_current(
@@ -475,10 +488,10 @@ pub fn role_for_current(
     scope_and_user: &ScopeAndUser,
     group_name: &str,
 ) -> Result<Option<RoleType>, Error> {
-    let connection = pool.get()?;
-    let user = internal::user::user_by_id(&connection, &scope_and_user.user_id)?;
+    let mut connection = pool.get()?;
+    let user = internal::user::user_by_id(&mut connection, &scope_and_user.user_id)?;
 
-    internal::member::role_for(&connection, &user.user_uuid, group_name)
+    internal::member::role_for(&mut connection, &user.user_uuid, group_name)
         .map(|role| role.map(|role| role.typ))
 }
 
@@ -487,8 +500,8 @@ pub fn get_curator_emails(
     scope_and_user: &ScopeAndUser,
     group_name: &str,
 ) -> Result<Vec<String>, Error> {
-    let connection = pool.get()?;
-    let user = internal::user::user_by_id(&connection, &scope_and_user.user_id)?;
+    let mut connection = pool.get()?;
+    let user = internal::user::user_by_id(&mut connection, &scope_and_user.user_id)?;
     ONLY_ADMINS.run(&RuleContext::minimal(
         &pool.clone(),
         scope_and_user,
@@ -496,7 +509,7 @@ pub fn get_curator_emails(
         &user.user_uuid,
     ))?;
 
-    internal::member::get_curator_emails_by_group_name(&connection, group_name)
+    internal::member::get_curator_emails_by_group_name(&mut connection, group_name)
 }
 
 pub fn get_member_emails(
@@ -504,8 +517,8 @@ pub fn get_member_emails(
     scope_and_user: &ScopeAndUser,
     group_name: &str,
 ) -> Result<Vec<String>, Error> {
-    let connection = pool.get()?;
-    let user = internal::user::user_by_id(&connection, &scope_and_user.user_id)?;
+    let mut connection = pool.get()?;
+    let user = internal::user::user_by_id(&mut connection, &scope_and_user.user_id)?;
     ONLY_ADMINS.run(&RuleContext::minimal(
         &pool.clone(),
         scope_and_user,
@@ -513,15 +526,15 @@ pub fn get_member_emails(
         &user.user_uuid,
     ))?;
 
-    internal::member::get_member_emails_by_group_name(&connection, group_name)
+    internal::member::get_member_emails_by_group_name(&mut connection, group_name)
 }
 
 pub fn get_anonymous_member_emails(
     pool: &Pool,
     scope_and_user: &ScopeAndUser,
 ) -> Result<Vec<String>, Error> {
-    let connection = pool.get()?;
-    let user = internal::user::user_by_id(&connection, &scope_and_user.user_id)?;
+    let mut connection = pool.get()?;
+    let user = internal::user::user_by_id(&mut connection, &scope_and_user.user_id)?;
     ONLY_ADMINS.run(&RuleContext::minimal(
         &pool.clone(),
         scope_and_user,
@@ -529,12 +542,12 @@ pub fn get_anonymous_member_emails(
         &user.user_uuid,
     ))?;
 
-    internal::member::get_anonymous_member_emails(&connection)
+    internal::member::get_anonymous_member_emails(&mut connection)
 }
 
 pub fn notify_anonymous_members(pool: &Pool) -> Result<(), Error> {
-    let connection = pool.get()?;
-    let emails = internal::member::get_anonymous_member_emails(&connection)?;
+    let mut connection = pool.get()?;
+    let emails = internal::member::get_anonymous_member_emails(&mut connection)?;
 
     send_emails(emails, &Template::AnonymousMember);
 

@@ -23,7 +23,7 @@ use uuid::Uuid;
 macro_rules! scoped_invitations_for_user {
     ($h:ident, $f:ident) => {
         pub fn $f(
-            connection: &PgConnection,
+            connection: &mut PgConnection,
             user: &User,
         ) -> Result<Vec<DisplayInvitationForUser>, Error> {
             use schema::groups as g;
@@ -59,7 +59,7 @@ macro_rules! scoped_invitations_for_user {
 macro_rules! scoped_invitations_for {
     ($t:ident, $h:ident, $f:ident) => {
         pub fn $f(
-            connection: &PgConnection,
+            connection: &mut PgConnection,
             group_name: &str,
         ) -> Result<Vec<DisplayInvitation>, Error> {
             use schema::groups as g;
@@ -128,7 +128,7 @@ scoped_invitations_for_user!(
 scoped_invitations_for_user!(hosts_public, public_scoped_invitations_and_host_for_user);
 
 pub fn update(
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     group_name: &str,
     host: User,
     member: User,
@@ -158,7 +158,7 @@ pub fn update(
 }
 
 pub fn delete(
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     group_name: &str,
     host: User,
     member: User,
@@ -183,7 +183,7 @@ pub fn delete(
 }
 
 pub fn invite(
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     group_name: &str,
     host: User,
     member: User,
@@ -214,7 +214,7 @@ pub fn invite(
         .map_err(Error::from)
 }
 
-pub fn pending_count(connection: &PgConnection, group_name: &str) -> Result<i64, Error> {
+pub fn pending_count(connection: &mut PgConnection, group_name: &str) -> Result<i64, Error> {
     let count = schema::invitations::table
         .inner_join(groups::groups)
         .filter(groups::name.eq(group_name))
@@ -223,7 +223,7 @@ pub fn pending_count(connection: &PgConnection, group_name: &str) -> Result<i64,
     Ok(count)
 }
 
-pub fn accept(connection: &PgConnection, group_name: &str, member: &User) -> Result<(), Error> {
+pub fn accept(connection: &mut PgConnection, group_name: &str, member: &User) -> Result<(), Error> {
     let group = internal::group::get_group(connection, group_name)?;
     let invitation = schema::invitations::table
         .filter(
@@ -271,7 +271,7 @@ pub fn accept(connection: &PgConnection, group_name: &str, member: &User) -> Res
     Ok(())
 }
 
-pub fn expire_before(connection: &PgConnection, before: NaiveDateTime) -> Result<(), Error> {
+pub fn expire_before(connection: &mut PgConnection, before: NaiveDateTime) -> Result<(), Error> {
     let deleted = diesel::delete(schema::invitations::table)
         .filter(schema::invitations::invitation_expiration.le(before))
         .get_results::<Invitation>(connection)?;
@@ -291,7 +291,7 @@ pub fn expire_before(connection: &PgConnection, before: NaiveDateTime) -> Result
 }
 
 pub fn invited_groups_for_user(
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     user_uuid: &Uuid,
 ) -> Result<Vec<Group>, Error> {
     schema::invitations::table
@@ -304,7 +304,7 @@ pub fn invited_groups_for_user(
 }
 
 pub fn get_invitation_text(
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     group_name: &str,
 ) -> Result<Option<Invitationtext>, Error> {
     let group = internal::group::get_group(connection, group_name)?;
@@ -316,7 +316,7 @@ pub fn get_invitation_text(
 }
 
 pub fn update_invitation_text(
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     group_name: &str,
     host: &User,
     body: String,

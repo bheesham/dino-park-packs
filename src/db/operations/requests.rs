@@ -21,15 +21,15 @@ pub fn request_membership(
     group_name: &str,
     request_expiration: Option<NaiveDateTime>,
 ) -> Result<(), Error> {
-    let connection = pool.get()?;
-    let user = internal::user::user_by_id(&connection, &scope_and_user.user_id)?;
+    let mut connection = pool.get()?;
+    let user = internal::user::user_by_id(&mut connection, &scope_and_user.user_id)?;
     CURRENT_USER_CAN_REQUEST.run(&RuleContext::minimal(
         pool,
         scope_and_user,
         group_name,
         &user.user_uuid,
     ))?;
-    request(&connection, group_name, user, request_expiration)
+    request(&mut connection, group_name, user, request_expiration)
 }
 
 pub fn reject_request(
@@ -38,16 +38,16 @@ pub fn reject_request(
     group_name: &str,
     user: &User,
 ) -> Result<(), Error> {
-    let connection = pool.get()?;
-    let host = internal::user::user_by_id(&connection, &scope_and_user.user_id)?;
+    let mut connection = pool.get()?;
+    let host = internal::user::user_by_id(&mut connection, &scope_and_user.user_id)?;
     HOST_IS_CURATOR.run(&RuleContext::minimal(
         pool,
         scope_and_user,
         group_name,
         &host.user_uuid,
     ))?;
-    reject(&connection, group_name, &host, user)?;
-    let p = internal::user::slim_user_profile_by_uuid(&connection, &user.user_uuid)?;
+    reject(&mut connection, group_name, &host, user)?;
+    let p = internal::user::slim_user_profile_by_uuid(&mut connection, &user.user_uuid)?;
     send_email(p.email, &Template::RejectRequest(group_name.to_owned()));
     Ok(())
 }
@@ -57,9 +57,9 @@ pub fn cancel_request(
     scope_and_user: &ScopeAndUser,
     group_name: &str,
 ) -> Result<(), Error> {
-    let connection = pool.get()?;
-    let user = internal::user::user_by_id(&connection, &scope_and_user.user_id)?;
-    cancel(&connection, group_name, &user)
+    let mut connection = pool.get()?;
+    let user = internal::user::user_by_id(&mut connection, &scope_and_user.user_id)?;
+    cancel(&mut connection, group_name, &user)
 }
 
 pub fn request_count(
@@ -67,24 +67,24 @@ pub fn request_count(
     scope_and_user: &ScopeAndUser,
     group_name: &str,
 ) -> Result<i64, Error> {
-    let connection = pool.get()?;
-    let user = internal::user::user_by_id(&connection, &scope_and_user.user_id)?;
+    let mut connection = pool.get()?;
+    let user = internal::user::user_by_id(&mut connection, &scope_and_user.user_id)?;
     HOST_IS_CURATOR.run(&RuleContext::minimal(
         pool,
         scope_and_user,
         group_name,
         &user.user_uuid,
     ))?;
-    count(&connection, group_name)
+    count(&mut connection, group_name)
 }
 
 pub fn pending_requests_for_user(
     pool: &Pool,
     scope_and_user: &ScopeAndUser,
 ) -> Result<Vec<DisplayRequestForUser>, Error> {
-    let connection = pool.get()?;
-    let user = internal::user::user_by_id(&connection, &scope_and_user.user_id)?;
-    requests_for_user(&connection, &user)
+    let mut connection = pool.get()?;
+    let user = internal::user::user_by_id(&mut connection, &scope_and_user.user_id)?;
+    requests_for_user(&mut connection, &user)
 }
 
 pub fn pending_requests(
@@ -92,8 +92,8 @@ pub fn pending_requests(
     scope_and_user: &ScopeAndUser,
     group_name: &str,
 ) -> Result<Vec<DisplayRequest>, Error> {
-    let connection = pool.get()?;
-    let user = internal::user::user_by_id(&connection, &scope_and_user.user_id)?;
+    let mut connection = pool.get()?;
+    let user = internal::user::user_by_id(&mut connection, &scope_and_user.user_id)?;
     HOST_IS_CURATOR.run(&RuleContext::minimal(
         pool,
         scope_and_user,
@@ -101,11 +101,11 @@ pub fn pending_requests(
         &user.user_uuid,
     ))?;
     match scope_and_user.scope {
-        Trust::Staff => staff_scoped_requests(&connection, group_name),
-        Trust::Ndaed => ndaed_scoped_requests(&connection, group_name),
-        Trust::Vouched => vouched_scoped_requests(&connection, group_name),
-        Trust::Authenticated => authenticated_scoped_requests(&connection, group_name),
-        Trust::Public => public_scoped_requests(&connection, group_name),
+        Trust::Staff => staff_scoped_requests(&mut connection, group_name),
+        Trust::Ndaed => ndaed_scoped_requests(&mut connection, group_name),
+        Trust::Vouched => vouched_scoped_requests(&mut connection, group_name),
+        Trust::Authenticated => authenticated_scoped_requests(&mut connection, group_name),
+        Trust::Public => public_scoped_requests(&mut connection, group_name),
     }
 }
 
@@ -122,10 +122,10 @@ pub fn pending_requests_notification(pool: &Pool) -> Result<(), Error> {
         .date()
         .and_hms_nano(23, 59, 59, 999_999_999)
         .naive_utc();
-    let connection = pool.get()?;
-    let pending = internal::request::new_pending(&connection, lower, upper)?;
+    let mut connection = pool.get()?;
+    let pending = internal::request::new_pending(&mut connection, lower, upper)?;
     for (group_id, npr) in pending {
-        let bcc = internal::member::get_curator_emails(&connection, group_id)?;
+        let bcc = internal::member::get_curator_emails(&mut connection, group_id)?;
         send_emails(bcc, &Template::PendingRequest(npr.group_name, npr.count));
     }
     Ok(())

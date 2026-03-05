@@ -71,9 +71,9 @@ pub async fn send_groups_to_cis(
     cis_client: Arc<impl AsyncCisClientTrait>,
     user_uuid: &Uuid,
 ) -> Result<(), Error> {
-    let connection = pool.get()?;
-    let user_profile = internal::user::user_profile_by_uuid(&connection, user_uuid)?;
-    let groups = internal::member::group_names_for_user(&connection, user_uuid)?;
+    let mut connection = pool.get()?;
+    let user_profile = internal::user::user_profile_by_uuid(&mut connection, user_uuid)?;
+    let groups = internal::member::group_names_for_user(&mut connection, user_uuid)?;
     drop(connection);
     _send_groups_to_cis(cis_client, groups, user_profile.profile).await
 }

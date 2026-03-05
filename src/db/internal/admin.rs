@@ -14,7 +14,7 @@ const ROLE_ADMIN: &str = "admin";
 
 pub fn add_admin_role(
     log_ctx: &LogContext,
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     group_id: i32,
 ) -> Result<Role, Error> {
     let admin = InsertRole {
@@ -39,7 +39,7 @@ pub fn add_admin_role(
         })
 }
 
-pub fn get_admin_role(connection: &PgConnection, group_id: i32) -> Result<Role, Error> {
+pub fn get_admin_role(connection: &mut PgConnection, group_id: i32) -> Result<Role, Error> {
     schema::roles::table
         .filter(schema::roles::group_id.eq(group_id))
         .filter(schema::roles::name.eq(ROLE_ADMIN))
@@ -50,7 +50,7 @@ pub fn get_admin_role(connection: &PgConnection, group_id: i32) -> Result<Role, 
 
 pub fn demote_to_member(
     host_uuid: &Uuid,
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     group_name: &str,
     user: &User,
     expiration: Option<i32>,
@@ -85,7 +85,7 @@ pub fn demote_to_member(
 }
 
 pub fn add_admin(
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     group_name: &str,
     host: &User,
     user: &User,
@@ -137,7 +137,7 @@ pub fn add_admin(
 }
 
 pub fn is_last_admin(
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     group_name: &str,
     user_uuid: &Uuid,
 ) -> Result<bool, Error> {

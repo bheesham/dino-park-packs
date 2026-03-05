@@ -19,7 +19,7 @@ use std::convert::TryFrom;
 use uuid::Uuid;
 
 pub fn get_group_with_terms_flag(
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     group_name: &str,
 ) -> Result<GroupWithTermsFlag, Error> {
     let group = schema::groups::table
@@ -33,7 +33,7 @@ pub fn get_group_with_terms_flag(
     Ok(GroupWithTermsFlag { group, terms })
 }
 
-pub fn get_group(connection: &PgConnection, group_name: &str) -> Result<Group, Error> {
+pub fn get_group(connection: &mut PgConnection, group_name: &str) -> Result<Group, Error> {
     schema::groups::table
         .filter(schema::groups::name.eq(group_name))
         .filter(schema::groups::active.eq(true))
@@ -41,7 +41,10 @@ pub fn get_group(connection: &PgConnection, group_name: &str) -> Result<Group, E
         .map_err(Into::into)
 }
 
-pub fn get_group_by_id(connection: &PgConnection, group_id: i32) -> Result<Option<Group>, Error> {
+pub fn get_group_by_id(
+    connection: &mut PgConnection,
+    group_id: i32,
+) -> Result<Option<Group>, Error> {
     schema::groups::table
         .filter(schema::groups::group_id.eq(group_id))
         .filter(schema::groups::active.eq(true))
@@ -51,7 +54,7 @@ pub fn get_group_by_id(connection: &PgConnection, group_id: i32) -> Result<Optio
 }
 
 pub fn get_groups_by_ids(
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     group_ids: &[i32],
 ) -> Result<Vec<Group>, Error> {
     schema::groups::table
@@ -63,7 +66,7 @@ pub fn get_groups_by_ids(
 
 pub fn add_group(
     host_uuid: &Uuid,
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     new_group: NewGroup,
 ) -> Result<Group, Error> {
     let group = InsertGroup {
@@ -99,7 +102,7 @@ pub fn add_group(
 
 pub fn update_group_trust(
     host_uuid: &Uuid,
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     name: &str,
     trust: &TrustType,
 ) -> Result<Group, Error> {
@@ -122,7 +125,7 @@ pub fn update_group_trust(
 
 pub fn update_group(
     host_uuid: &Uuid,
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     name: String,
     group_update: GroupUpdate,
 ) -> Result<Group, Error> {
@@ -157,7 +160,7 @@ pub fn update_group(
 }
 
 fn log_delete(
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     log_ctx: &LogContext,
     target: LogTargetType,
     body: Option<Value>,
@@ -165,7 +168,11 @@ fn log_delete(
     internal::log::db_log(connection, log_ctx, target, LogOperationType::Deleted, body);
 }
 
-pub fn delete_group(host_uuid: &Uuid, connection: &PgConnection, name: &str) -> Result<(), Error> {
+pub fn delete_group(
+    host_uuid: &Uuid,
+    connection: &mut PgConnection,
+    name: &str,
+) -> Result<(), Error> {
     let group = get_group(connection, name)?;
     let log_ctx = LogContext::with(group.id, *host_uuid);
     diesel::delete(schema::invitations::table)
@@ -219,7 +226,10 @@ pub fn delete_group(host_uuid: &Uuid, connection: &PgConnection, name: &str) -> 
         .map_err(Into::into)
 }
 
-pub fn groups_for_user(connection: &PgConnection, user_uuid: &Uuid) -> Result<Vec<Group>, Error> {
+pub fn groups_for_user(
+    connection: &mut PgConnection,
+    user_uuid: &Uuid,
+) -> Result<Vec<Group>, Error> {
     schema::memberships::table
         .filter(schema::memberships::user_uuid.eq(user_uuid))
         .select(schema::memberships::group_id)
@@ -229,7 +239,11 @@ pub fn groups_for_user(connection: &PgConnection, user_uuid: &Uuid) -> Result<Ve
         .map_err(Into::into)
 }
 
-pub fn reserve_group(connection: &PgConnection, host_uuid: &Uuid, name: &str) -> Result<(), Error> {
+pub fn reserve_group(
+    connection: &mut PgConnection,
+    host_uuid: &Uuid,
+    name: &str,
+) -> Result<(), Error> {
     let group = InsertGroup {
         name: name.into(),
         active: false,
@@ -258,7 +272,7 @@ pub fn reserve_group(connection: &PgConnection, host_uuid: &Uuid, name: &str) ->
 }
 
 pub fn list_groups(
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     filter: Option<String>,
     sort_by: SortGroupsBy,
     limit: i64,
@@ -295,7 +309,7 @@ pub fn list_groups(
 }
 
 pub fn inactive_groups(
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     limit: i64,
     offset: i64,
 ) -> Result<Vec<Group>, Error> {
@@ -307,7 +321,7 @@ pub fn inactive_groups(
         .map_err(Into::into)
 }
 
-pub fn delete_inactive_group(connection: &PgConnection, group_name: &str) -> Result<(), Error> {
+pub fn delete_inactive_group(connection: &mut PgConnection, group_name: &str) -> Result<(), Error> {
     use schema::groups as g;
     use schema::logs as l;
     let id = g::table

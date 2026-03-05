@@ -25,7 +25,7 @@ use failure::Error;
 use std::sync::Arc;
 
 fn add_new_group_db(
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     new_group: NewGroup,
     creator: User,
 ) -> Result<(), Error> {
@@ -43,15 +43,15 @@ pub async fn add_new_group(
     new_group: NewGroup,
     cis_client: Arc<impl AsyncCisClientTrait>,
 ) -> Result<(), Error> {
-    let connection = pool.get()?;
-    let user = internal::user::user_by_id(&connection, &scope_and_user.user_id)?;
+    let mut connection = pool.get()?;
+    let user = internal::user::user_by_id(&mut connection, &scope_and_user.user_id)?;
     CREATE_GROUP.run(&RuleContext::minimal(
         pool,
         scope_and_user,
         &new_group.name,
         &user.user_uuid,
     ))?;
-    add_new_group_db(&connection, new_group, user).map_err(|_| PacksError::GroupNameExists)?;
+    add_new_group_db(&mut connection, new_group, user).map_err(|_| PacksError::GroupNameExists)?;
     drop(connection);
     send_groups_to_cis(pool, cis_client, &user.user_uuid).await
 }
@@ -62,16 +62,16 @@ pub async fn delete_group(
     group_name: &str,
     cis_client: Arc<impl AsyncCisClientTrait>,
 ) -> Result<(), Error> {
-    let connection = pool.get()?;
-    let host = internal::user::user_by_id(&connection, &scope_and_user.user_id)?;
+    let mut connection = pool.get()?;
+    let host = internal::user::user_by_id(&mut connection, &scope_and_user.user_id)?;
     HOST_IS_GROUP_ADMIN.run(&RuleContext::minimal(
         pool,
         scope_and_user,
         group_name,
         &host.user_uuid,
     ))?;
-    let bcc = internal::member::get_curator_emails_by_group_name(&connection, group_name)?;
-    let members = internal::member::get_members_not_current(&connection, group_name, &host)?;
+    let bcc = internal::member::get_curator_emails_by_group_name(&mut connection, group_name)?;
+    let members = internal::member::get_members_not_current(&mut connection, group_name, &host)?;
     drop(connection);
     operations::members::remove_members_silent(
         pool,
@@ -82,9 +82,9 @@ pub async fn delete_group(
     )
     .await?;
     operations::members::remove(pool, scope_and_user, group_name, &host, &host, cis_client).await?;
-    let connection = pool.get()?;
-    internal::group::delete_group(&host.user_uuid, &connection, group_name)?;
-    let host_profile = internal::user::slim_user_profile_by_uuid(&connection, &host.user_uuid)?;
+    let mut connection = pool.get()?;
+    internal::group::delete_group(&host.user_uuid, &mut connection, group_name)?;
+    let host_profile = internal::user::slim_user_profile_by_uuid(&mut connection, &host.user_uuid)?;
     send_emails(
         bcc,
         &Template::GroupDeleted(group_name.to_string(), host_profile.username),
@@ -99,9 +99,9 @@ pub async fn update_group_trust(
     trust: &TrustType,
     cis_client: Arc<impl AsyncCisClientTrait>,
 ) -> Result<(), Error> {
-    let connection = pool.get()?;
+    let mut connection = pool.get()?;
     let to_delete =
-        internal::member::get_members_by_trust_less_than(&connection, group_name, trust)?;
+        internal::member::get_members_by_trust_less_than(&mut connection, group_name, trust)?;
     drop(connection);
     operations::members::remove_members_silent(
         pool,
@@ -111,9 +111,9 @@ pub async fn update_group_trust(
         cis_client,
     )
     .await?;
-    let connection = pool.get()?;
-    let host = internal::user::user_by_id(&connection, &scope_and_user.user_id)?;
-    internal::group::update_group_trust(&host.user_uuid, &connection, group_name, trust)?;
+    let mut connection = pool.get()?;
+    let host = internal::user::user_by_id(&mut connection, &scope_and_user.user_id)?;
+    internal::group::update_group_trust(&host.user_uuid, &mut connection, group_name, trust)?;
     Ok(())
 }
 
@@ -123,30 +123,30 @@ pub fn update_group(
     group_name: String,
     group_update: GroupUpdate,
 ) -> Result<(), Error> {
-    let connection = pool.get()?;
-    let host = internal::user::user_by_id(&connection, &scope_and_user.user_id)?;
+    let mut connection = pool.get()?;
+    let host = internal::user::user_by_id(&mut connection, &scope_and_user.user_id)?;
     HOST_IS_GROUP_ADMIN.run(&RuleContext::minimal(
         pool,
         scope_and_user,
         &group_name,
         &host.user_uuid,
     ))?;
-    internal::group::update_group(&host.user_uuid, &connection, group_name, group_update)
+    internal::group::update_group(&host.user_uuid, &mut connection, group_name, group_update)
         .map(|_| ())
         .map_err(Into::into)
 }
 
 pub fn get_group(pool: &Pool, group_name: &str) -> Result<Group, Error> {
-    let connection = pool.get()?;
-    internal::group::get_group(&connection, group_name)
+    let mut connection = pool.get()?;
+    internal::group::get_group(&mut connection, group_name)
 }
 
 pub fn get_group_with_terms_flag(
     pool: &Pool,
     group_name: &str,
 ) -> Result<GroupWithTermsFlag, Error> {
-    let connection = pool.get()?;
-    internal::group::get_group_with_terms_flag(&connection, group_name)
+    let mut connection = pool.get()?;
+    internal::group::get_group_with_terms_flag(&mut connection, group_name)
 }
 
 pub fn list_groups(
@@ -156,8 +156,8 @@ pub fn list_groups(
     limit: i64,
     offset: i64,
 ) -> Result<PaginatedGroupsLists, Error> {
-    let connection = pool.get()?;
-    internal::group::list_groups(&connection, filter, sort_by, limit, offset)
+    let mut connection = pool.get()?;
+    internal::group::list_groups(&mut connection, filter, sort_by, limit, offset)
 }
 
 pub fn list_inactive_groups(
@@ -166,8 +166,8 @@ pub fn list_inactive_groups(
     limit: i64,
     offset: i64,
 ) -> Result<Vec<Group>, Error> {
-    let connection = pool.get()?;
-    let user = internal::user::user_by_id(&connection, &scope_and_user.user_id)?;
+    let mut connection = pool.get()?;
+    let user = internal::user::user_by_id(&mut connection, &scope_and_user.user_id)?;
     ONLY_ADMINS.run(&RuleContext::minimal(
         &pool.clone(),
         scope_and_user,
@@ -175,7 +175,7 @@ pub fn list_inactive_groups(
         &user.user_uuid,
     ))?;
 
-    internal::group::inactive_groups(&connection, limit, offset)
+    internal::group::inactive_groups(&mut connection, limit, offset)
 }
 
 pub fn delete_inactive_group(
@@ -183,8 +183,8 @@ pub fn delete_inactive_group(
     scope_and_user: &ScopeAndUser,
     group_name: &str,
 ) -> Result<(), Error> {
-    let connection = pool.get()?;
-    let user = internal::user::user_by_id(&connection, &scope_and_user.user_id)?;
+    let mut connection = pool.get()?;
+    let user = internal::user::user_by_id(&mut connection, &scope_and_user.user_id)?;
     ONLY_ADMINS.run(&RuleContext::minimal(
         &pool.clone(),
         scope_and_user,
@@ -192,7 +192,7 @@ pub fn delete_inactive_group(
         &user.user_uuid,
     ))?;
 
-    internal::group::delete_inactive_group(&connection, group_name)
+    internal::group::delete_inactive_group(&mut connection, group_name)
 }
 
 pub fn reserve_group(
@@ -200,8 +200,8 @@ pub fn reserve_group(
     scope_and_user: &ScopeAndUser,
     group_name: &str,
 ) -> Result<(), Error> {
-    let connection = pool.get()?;
-    let user = internal::user::user_by_id(&connection, &scope_and_user.user_id)?;
+    let mut connection = pool.get()?;
+    let user = internal::user::user_by_id(&mut connection, &scope_and_user.user_id)?;
     ONLY_ADMINS.run(&RuleContext::minimal(
         &pool.clone(),
         scope_and_user,
@@ -209,16 +209,16 @@ pub fn reserve_group(
         &user.user_uuid,
     ))?;
 
-    internal::group::reserve_group(&connection, &user.user_uuid, group_name)
+    internal::group::reserve_group(&mut connection, &user.user_uuid, group_name)
 }
 
 pub fn groups_for_current_user(
     pool: &Pool,
     scope_and_user: &ScopeAndUser,
 ) -> Result<Vec<String>, Error> {
-    let connection = pool.get()?;
-    let user = internal::user::user_by_id(&connection, &scope_and_user.user_id)?;
+    let mut connection = pool.get()?;
+    let user = internal::user::user_by_id(&mut connection, &scope_and_user.user_id)?;
 
-    internal::group::groups_for_user(&connection, &user.user_uuid)
+    internal::group::groups_for_user(&mut connection, &user.user_uuid)
         .map(|groups| groups.into_iter().map(|g| g.name).collect())
 }

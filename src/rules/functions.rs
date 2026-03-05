@@ -38,8 +38,8 @@ pub fn rule_is_creator(ctx: &RuleContext) -> Result<(), RuleError> {
 /// Check if the host is either `RoleType::Admin` or has `InviteMember` permissions for the given
 /// group.
 pub fn rule_host_can_invite(ctx: &RuleContext) -> Result<(), RuleError> {
-    let connection = ctx.pool.get().map_err(|_| RuleError::PoolError)?;
-    match internal::member::role_for(&connection, ctx.host_uuid, ctx.group) {
+    let mut connection = ctx.pool.get().map_err(|_| RuleError::PoolError)?;
+    match internal::member::role_for(&mut connection, ctx.host_uuid, ctx.group) {
         Ok(Some(role))
             if role.typ == RoleType::Admin
                 || role.permissions.contains(&PermissionType::InviteMember) =>
@@ -53,8 +53,8 @@ pub fn rule_host_can_invite(ctx: &RuleContext) -> Result<(), RuleError> {
 /// Check if the host is either `RoleType::Admin` or has `RemoveMember` permissions for the given
 /// group.
 pub fn rule_host_can_remove(ctx: &RuleContext) -> Result<(), RuleError> {
-    let connection = ctx.pool.get().map_err(|_| RuleError::PoolError)?;
-    match internal::member::role_for(&connection, ctx.host_uuid, ctx.group) {
+    let mut connection = ctx.pool.get().map_err(|_| RuleError::PoolError)?;
+    match internal::member::role_for(&mut connection, ctx.host_uuid, ctx.group) {
         Ok(Some(role))
             if role.typ == RoleType::Admin
                 || role.permissions.contains(&PermissionType::RemoveMember) =>
@@ -67,8 +67,8 @@ pub fn rule_host_can_remove(ctx: &RuleContext) -> Result<(), RuleError> {
 
 pub fn user_not_a_member(ctx: &RuleContext) -> Result<(), RuleError> {
     let member_uuid = ctx.member_uuid.ok_or(RuleError::InvalidRuleContext)?;
-    let connection = ctx.pool.get().map_err(|_| RuleError::PoolError)?;
-    match internal::member::role_for(&connection, member_uuid, ctx.group) {
+    let mut connection = ctx.pool.get().map_err(|_| RuleError::PoolError)?;
+    match internal::member::role_for(&mut connection, member_uuid, ctx.group) {
         Ok(Some(_)) => Err(RuleError::AlreadyMember),
         Ok(None) => Ok(()),
         Err(_) => Err(RuleError::DBError),
@@ -77,9 +77,9 @@ pub fn user_not_a_member(ctx: &RuleContext) -> Result<(), RuleError> {
 
 /// Check if the member is nda'd
 pub fn member_is_ndaed(ctx: &RuleContext) -> Result<(), RuleError> {
-    let connection = ctx.pool.get().map_err(|_| RuleError::PoolError)?;
+    let mut connection = ctx.pool.get().map_err(|_| RuleError::PoolError)?;
     let trust = internal::user::user_trust(
-        &connection,
+        &mut connection,
         ctx.member_uuid.ok_or(RuleError::InvalidRuleContext)?,
     )
     .map_err(|_| RuleError::UserNotFound)?;
@@ -91,14 +91,14 @@ pub fn member_is_ndaed(ctx: &RuleContext) -> Result<(), RuleError> {
 
 /// Check if the user is nda'd or the group is the nda group
 pub fn member_can_join(ctx: &RuleContext) -> Result<(), RuleError> {
-    let connection = ctx.pool.get().map_err(|_| RuleError::PoolError)?;
+    let mut connection = ctx.pool.get().map_err(|_| RuleError::PoolError)?;
     let trust = internal::user::user_trust(
-        &connection,
+        &mut connection,
         ctx.member_uuid.ok_or(RuleError::InvalidRuleContext)?,
     )
     .map_err(|_| RuleError::UserNotFound)?;
     let group =
-        internal::group::get_group(&connection, ctx.group).map_err(|_| RuleError::DBError)?;
+        internal::group::get_group(&mut connection, ctx.group).map_err(|_| RuleError::DBError)?;
     if trust >= group.trust {
         return Ok(());
     }
@@ -107,9 +107,9 @@ pub fn member_can_join(ctx: &RuleContext) -> Result<(), RuleError> {
 
 /// Check if the current user is nda'd or the group is the nda group
 pub fn current_user_can_join(ctx: &RuleContext) -> Result<(), RuleError> {
-    let connection = ctx.pool.get().map_err(|_| RuleError::PoolError)?;
+    let mut connection = ctx.pool.get().map_err(|_| RuleError::PoolError)?;
     let group =
-        internal::group::get_group(&connection, ctx.group).map_err(|_| RuleError::DBError)?;
+        internal::group::get_group(&mut connection, ctx.group).map_err(|_| RuleError::DBError)?;
     if TrustType::from(&ctx.scope_and_user.scope) >= group.trust {
         return Ok(());
     }
@@ -118,9 +118,9 @@ pub fn current_user_can_join(ctx: &RuleContext) -> Result<(), RuleError> {
 
 /// Check if the groups is of type `Reviewed`
 pub fn is_reviewed_group(ctx: &RuleContext) -> Result<(), RuleError> {
-    let connection = ctx.pool.get().map_err(|_| RuleError::PoolError)?;
+    let mut connection = ctx.pool.get().map_err(|_| RuleError::PoolError)?;
     let group =
-        internal::group::get_group(&connection, ctx.group).map_err(|_| RuleError::DBError)?;
+        internal::group::get_group(&mut connection, ctx.group).map_err(|_| RuleError::DBError)?;
     match group.typ {
         GroupType::Reviewed => Ok(()),
         _ => Err(RuleError::NotReviewedGroup),
@@ -129,8 +129,8 @@ pub fn is_reviewed_group(ctx: &RuleContext) -> Result<(), RuleError> {
 
 /// Check if the host is either `RoleType::Admin` of `RoleType::Curator`
 pub fn rule_host_is_curator(ctx: &RuleContext) -> Result<(), RuleError> {
-    let connection = ctx.pool.get().map_err(|_| RuleError::PoolError)?;
-    match internal::member::role_for(&connection, ctx.host_uuid, ctx.group) {
+    let mut connection = ctx.pool.get().map_err(|_| RuleError::PoolError)?;
+    match internal::member::role_for(&mut connection, ctx.host_uuid, ctx.group) {
         Ok(Some(role)) if role.typ == RoleType::Admin || role.typ == RoleType::Curator => Ok(()),
         _ => Err(RuleError::NotACurator),
     }
@@ -138,8 +138,8 @@ pub fn rule_host_is_curator(ctx: &RuleContext) -> Result<(), RuleError> {
 
 /// Check if the host is either `RoleType::Admin` for the given group
 pub fn rule_host_is_group_admin(ctx: &RuleContext) -> Result<(), RuleError> {
-    let connection = ctx.pool.get().map_err(|_| RuleError::PoolError)?;
-    match internal::member::role_for(&connection, ctx.host_uuid, ctx.group) {
+    let mut connection = ctx.pool.get().map_err(|_| RuleError::PoolError)?;
+    match internal::member::role_for(&mut connection, ctx.host_uuid, ctx.group) {
         Ok(Some(role)) if role.typ == RoleType::Admin => Ok(()),
         _ => Err(RuleError::NotAnAdmin),
     }
@@ -148,8 +148,8 @@ pub fn rule_host_is_group_admin(ctx: &RuleContext) -> Result<(), RuleError> {
 /// Check if the member is either `RoleType::Member` for the given group
 pub fn rule_user_has_member_role(ctx: &RuleContext) -> Result<(), RuleError> {
     let member_uuid = ctx.member_uuid.ok_or(RuleError::InvalidRuleContext)?;
-    let connection = ctx.pool.get().map_err(|_| RuleError::PoolError)?;
-    match internal::member::role_for(&connection, member_uuid, ctx.group) {
+    let mut connection = ctx.pool.get().map_err(|_| RuleError::PoolError)?;
+    match internal::member::role_for(&mut connection, member_uuid, ctx.group) {
         Ok(Some(role)) if role.typ == RoleType::Member => Ok(()),
         _ => Err(RuleError::NotAMember),
     }
@@ -158,8 +158,8 @@ pub fn rule_user_has_member_role(ctx: &RuleContext) -> Result<(), RuleError> {
 /// Check if the host is either `RoleType::Admin` or has `EditTerms` permissions for the given
 /// group.
 pub fn rule_host_can_edit_terms(ctx: &RuleContext) -> Result<(), RuleError> {
-    let connection = ctx.pool.get().map_err(|_| RuleError::PoolError)?;
-    match internal::member::role_for(&connection, ctx.host_uuid, ctx.group) {
+    let mut connection = ctx.pool.get().map_err(|_| RuleError::PoolError)?;
+    match internal::member::role_for(&mut connection, ctx.host_uuid, ctx.group) {
         Ok(Some(role))
             if role.typ == RoleType::Admin
                 || role.permissions.contains(&PermissionType::EditTerms) =>

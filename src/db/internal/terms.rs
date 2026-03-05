@@ -9,7 +9,7 @@ use diesel::prelude::*;
 use failure::Error;
 use uuid::Uuid;
 
-pub fn get_terms(connection: &PgConnection, group_name: &str) -> Result<Option<String>, Error> {
+pub fn get_terms(connection: &mut PgConnection, group_name: &str) -> Result<Option<String>, Error> {
     let group = internal::group::get_group(connection, group_name)?;
     Terms::belonging_to(&group)
         .first(connection)
@@ -20,7 +20,7 @@ pub fn get_terms(connection: &PgConnection, group_name: &str) -> Result<Option<S
 
 pub fn delete_terms(
     host_uuid: &Uuid,
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     group_name: &str,
 ) -> Result<(), Error> {
     let group = internal::group::get_group(connection, group_name)?;
@@ -42,7 +42,7 @@ pub fn delete_terms(
 
 pub fn set_terms(
     host_uuid: &Uuid,
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     group_name: &str,
     text: String,
 ) -> Result<(), Error> {

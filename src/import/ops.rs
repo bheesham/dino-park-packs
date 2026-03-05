@@ -53,11 +53,11 @@ pub fn import_legacy_user_data(
     legacy_user_data_raw: Vec<LegacyUserDataRaw>,
 ) -> Result<(), Error> {
     use schema::legacy_user_data as lud;
-    let connection = pool.get()?;
+    let mut connection = pool.get()?;
     let legacy_user_data: Vec<LegacyUserData> = legacy_user_data_raw
         .into_iter()
         .filter_map(
-            |ludr| match internal::user::user_by_id(&connection, &ludr.user_id) {
+            |ludr| match internal::user::user_by_id(&mut connection, &ludr.user_id) {
                 Ok(user) => Some(LegacyUserData {
                     user_uuid: user.user_uuid,
                     first_name: ludr.full_name,
@@ -78,12 +78,12 @@ pub fn import_legacy_user_data(
             lud::first_name.eq(excluded(lud::first_name)),
             lud::email.eq(excluded(lud::email)),
         ))
-        .execute(&connection)?;
+        .execute(&mut connection)?;
     Ok(())
 }
 
 pub fn import_group(
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     moz_group: MozilliansGroup,
     trust: TrustType,
 ) -> Result<(), Error> {
@@ -142,7 +142,7 @@ pub fn import_group(
 }
 
 async fn get_user_profile(
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     user_id: &str,
     cis_client: Arc<impl AsyncCisClientTrait>,
 ) -> Result<UserProfile, Error> {
@@ -160,7 +160,7 @@ async fn get_user_profile(
 }
 
 async fn import_curator(
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     group_name: &str,
     curator: MozilliansGroupCurator,
     trust: TrustType,
@@ -181,7 +181,7 @@ async fn import_curator(
 }
 
 pub async fn import_curators(
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     group_name: &str,
     moz_curators: Vec<MozilliansGroupCurator>,
     trust: TrustType,
@@ -201,7 +201,7 @@ pub async fn import_curators(
 }
 
 pub async fn import_member(
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     group_name: &str,
     member: MozilliansGroupMembership,
     trust: TrustType,
@@ -255,7 +255,7 @@ pub async fn import_member(
 }
 
 pub async fn import_members(
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     group_name: &str,
     moz_members: Vec<MozilliansGroupMembership>,
     trust: TrustType,
@@ -291,11 +291,11 @@ pub async fn import(
     group_import: GroupImport,
     cis_client: Arc<impl AsyncCisClientTrait>,
 ) -> Result<(), Error> {
-    let connection = pool.get()?;
+    let mut connection = pool.get()?;
     let group_name = group_import.group.name.clone();
-    import_group(&connection, group_import.group, group_import.trust)?;
+    import_group(&mut connection, group_import.group, group_import.trust)?;
     import_curators(
-        &connection,
+        &mut connection,
         &group_name,
         group_import.curators,
         group_import.trust,
@@ -303,7 +303,7 @@ pub async fn import(
     )
     .await?;
     import_members(
-        &connection,
+        &mut connection,
         &group_name,
         group_import.memberships,
         group_import.trust,

@@ -16,7 +16,7 @@ use uuid::Uuid;
 
 const DEFAULT_UUID: Uuid = Uuid::nil();
 
-pub fn user_trust(connection: &PgConnection, user_uuid: &Uuid) -> Result<TrustType, Error> {
+pub fn user_trust(connection: &mut PgConnection, user_uuid: &Uuid) -> Result<TrustType, Error> {
     if user_uuid == &DEFAULT_UUID {
         return Ok(Default::default());
     }
@@ -28,7 +28,7 @@ pub fn user_trust(connection: &PgConnection, user_uuid: &Uuid) -> Result<TrustTy
         .map_err(Into::into)
 }
 
-pub fn user_by_id(connection: &PgConnection, user_id: &str) -> Result<User, Error> {
+pub fn user_by_id(connection: &mut PgConnection, user_id: &str) -> Result<User, Error> {
     schema::user_ids::table
         .filter(schema::user_ids::user_id.eq(user_id))
         .select(schema::user_ids::user_uuid)
@@ -38,7 +38,7 @@ pub fn user_by_id(connection: &PgConnection, user_id: &str) -> Result<User, Erro
 }
 
 pub fn user_profile_by_uuid(
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     user_uuid: &Uuid,
 ) -> Result<UserProfile, Error> {
     if user_uuid == &DEFAULT_UUID {
@@ -54,7 +54,7 @@ pub fn user_profile_by_uuid(
 }
 
 pub fn user_profile_by_uuid_maybe(
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     user_uuid: &Uuid,
 ) -> Result<Option<UserProfile>, Error> {
     if user_uuid == &DEFAULT_UUID {
@@ -71,7 +71,7 @@ pub fn user_profile_by_uuid_maybe(
 }
 
 pub fn slim_user_profile_by_uuid(
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     user_uuid: &Uuid,
 ) -> Result<UserProfileSlim, Error> {
     use schema::profiles as p;
@@ -88,7 +88,7 @@ pub fn slim_user_profile_by_uuid(
 }
 
 pub fn user_profile_by_user_id(
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     user_id: &str,
 ) -> Result<UserProfile, Error> {
     schema::profiles::table
@@ -99,7 +99,7 @@ pub fn user_profile_by_user_id(
         .map_err(|err| PacksError::ProfileNotFound(user_id.to_string(), err.to_string()).into())
 }
 
-pub fn delete_user(connection: &PgConnection, user: &User) -> Result<(), Error> {
+pub fn delete_user(connection: &mut PgConnection, user: &User) -> Result<(), Error> {
     diesel::delete(schema::requests::table)
         .filter(schema::requests::user_uuid.eq(user.user_uuid))
         .execute(connection)?;
@@ -136,7 +136,7 @@ pub fn delete_user(connection: &PgConnection, user: &User) -> Result<(), Error> 
     Ok(())
 }
 
-pub fn update_user_cache(connection: &PgConnection, profile: &Profile) -> Result<(), Error> {
+pub fn update_user_cache(connection: &mut PgConnection, profile: &Profile) -> Result<(), Error> {
     let user_profile = UserProfile::try_from(profile.clone())?;
     let user_profile = UserProfileValue::try_from(user_profile)?;
 
@@ -329,7 +329,7 @@ macro_rules! scoped_search_users {
 }
 
 pub fn search_curators_for_group(
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     group_name: &str,
     scope: TrustType,
     q: &str,
@@ -362,7 +362,7 @@ pub fn search_curators_for_group(
     }
 }
 pub fn search_users_for_group(
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     group_name: &str,
     trust: TrustType,
     scope: TrustType,
@@ -396,7 +396,7 @@ pub fn search_users_for_group(
 }
 
 pub fn search_users(
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     trust: TrustType,
     scope: TrustType,
     q: &str,
@@ -427,7 +427,7 @@ pub fn search_users(
     }
 }
 
-pub fn all_staff(connection: &PgConnection) -> Result<Vec<Uuid>, Error> {
+pub fn all_staff(connection: &mut PgConnection) -> Result<Vec<Uuid>, Error> {
     schema::profiles::table
         .filter(schema::profiles::trust.ge(TrustType::Staff))
         .select(schema::profiles::user_uuid)
@@ -435,7 +435,7 @@ pub fn all_staff(connection: &PgConnection) -> Result<Vec<Uuid>, Error> {
         .map_err(Into::into)
 }
 
-pub fn all_members(connection: &PgConnection) -> Result<Vec<Uuid>, Error> {
+pub fn all_members(connection: &mut PgConnection) -> Result<Vec<Uuid>, Error> {
     schema::memberships::table
         .select(schema::memberships::user_uuid)
         .distinct()
@@ -459,7 +459,7 @@ where
     ExtrPath::new(left, right)
 }
 
-pub fn all_inactive(connection: &PgConnection) -> Result<Vec<Uuid>, Error> {
+pub fn all_inactive(connection: &mut PgConnection) -> Result<Vec<Uuid>, Error> {
     schema::profiles::table
         .filter(
             extr_path(
@@ -473,7 +473,7 @@ pub fn all_inactive(connection: &PgConnection) -> Result<Vec<Uuid>, Error> {
         .map_err(Into::into)
 }
 
-pub fn all_with_groups(connection: &PgConnection) -> Result<Vec<Uuid>, Error> {
+pub fn all_with_groups(connection: &mut PgConnection) -> Result<Vec<Uuid>, Error> {
     schema::profiles::table
         .filter(
             extr_path(

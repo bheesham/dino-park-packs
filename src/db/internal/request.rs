@@ -21,7 +21,7 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 pub fn requests_for_user(
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     user: &User,
 ) -> Result<Vec<DisplayRequestForUser>, Error> {
     use schema::groups as g;
@@ -47,7 +47,7 @@ pub fn requests_for_user(
 macro_rules! scoped_requests_for {
     ($t:ident, $f:ident) => {
         pub fn $f(
-            connection: &PgConnection,
+            connection: &mut PgConnection,
             group_name: &str,
         ) -> Result<Vec<DisplayRequest>, Error> {
             use schema::groups as g;
@@ -87,7 +87,7 @@ scoped_requests_for!(users_authenticated, authenticated_scoped_requests);
 scoped_requests_for!(users_public, public_scoped_requests);
 
 pub fn request(
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     group_name: &str,
     member: User,
     request_expiration: Option<NaiveDateTime>,
@@ -121,7 +121,7 @@ pub fn request(
 }
 
 pub fn delete(
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     group_name: &str,
     host: Option<User>,
     user: &User,
@@ -150,7 +150,7 @@ pub fn delete(
         .map_err(Error::from)
 }
 
-pub fn cancel(connection: &PgConnection, group_name: &str, user: &User) -> Result<(), Error> {
+pub fn cancel(connection: &mut PgConnection, group_name: &str, user: &User) -> Result<(), Error> {
     delete(
         connection,
         group_name,
@@ -161,7 +161,7 @@ pub fn cancel(connection: &PgConnection, group_name: &str, user: &User) -> Resul
 }
 
 pub fn reject(
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     group_name: &str,
     host: &User,
     member: &User,
@@ -175,7 +175,7 @@ pub fn reject(
     )
 }
 
-pub fn count(connection: &PgConnection, group_name: &str) -> Result<i64, Error> {
+pub fn count(connection: &mut PgConnection, group_name: &str) -> Result<i64, Error> {
     let count = schema::requests::table
         .inner_join(groups::groups)
         .filter(groups::name.eq(group_name))
@@ -185,7 +185,7 @@ pub fn count(connection: &PgConnection, group_name: &str) -> Result<i64, Error> 
 }
 
 pub fn new_pending(
-    connection: &PgConnection,
+    connection: &mut PgConnection,
     lower: NaiveDateTime,
     upper: NaiveDateTime,
 ) -> Result<HashMap<i32, NewPendingRequest>, Error> {
@@ -218,7 +218,7 @@ pub fn new_pending(
     Ok(pending)
 }
 
-pub fn expire_before(connection: &PgConnection, before: NaiveDateTime) -> Result<(), Error> {
+pub fn expire_before(connection: &mut PgConnection, before: NaiveDateTime) -> Result<(), Error> {
     let deleted = diesel::delete(schema::requests::table)
         .filter(schema::requests::request_expiration.le(before))
         .get_results::<Request>(connection)?;
