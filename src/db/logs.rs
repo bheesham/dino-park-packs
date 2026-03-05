@@ -9,9 +9,9 @@ use serde_json::Value;
 use uuid::Uuid;
 
 #[derive(Identifiable, Associations, Queryable, PartialEq, Eq, Debug, Insertable, AsChangeset)]
-#[belongs_to(Group)]
-#[primary_key(group_id)]
-#[table_name = "logs"]
+#[diesel(belongs_to(Group))]
+#[diesel(primary_key(group_id))]
+#[diesel(table_name = logs)]
 pub struct InsertLog {
     pub ts: Option<NaiveDateTime>,
     pub target: LogTargetType,
@@ -24,9 +24,9 @@ pub struct InsertLog {
 }
 
 #[derive(Identifiable, Associations, Queryable, PartialEq, Eq, Debug, Serialize)]
-#[belongs_to(Group)]
-#[primary_key(group_id)]
-#[table_name = "logs"]
+#[diesel(belongs_to(Group))]
+#[diesel(primary_key(group_id))]
+#[diesel(table_name = logs)]
 pub struct Log {
     pub id: i32,
     pub ts: NaiveDateTime,

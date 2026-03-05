@@ -14,8 +14,8 @@ use std::convert::TryFrom;
 use uuid::Uuid;
 
 #[derive(Deserialize, Identifiable, Queryable, PartialEq, Eq, Debug, Insertable, AsChangeset)]
-#[primary_key(user_uuid)]
-#[table_name = "legacy_user_data"]
+#[diesel(primary_key(user_uuid))]
+#[diesel(table_name = legacy_user_data)]
 pub struct LegacyUserData {
     pub user_uuid: Uuid,
     pub first_name: Option<String>,
@@ -23,8 +23,8 @@ pub struct LegacyUserData {
 }
 
 #[derive(Identifiable, Queryable, PartialEq, Eq, Debug, Insertable, AsChangeset, Default)]
-#[primary_key(user_uuid)]
-#[table_name = "profiles"]
+#[diesel(primary_key(user_uuid))]
+#[diesel(table_name = profiles)]
 pub struct UserProfileSlim {
     pub user_uuid: Uuid,
     pub user_id: String,
@@ -34,8 +34,8 @@ pub struct UserProfileSlim {
 }
 
 #[derive(Identifiable, Queryable, PartialEq, Eq, Debug, Insertable, AsChangeset)]
-#[primary_key(user_uuid)]
-#[table_name = "profiles"]
+#[diesel(primary_key(user_uuid))]
+#[diesel(table_name = profiles)]
 pub struct UserProfileValue {
     pub user_uuid: Uuid,
     pub user_id: String,
@@ -108,8 +108,8 @@ impl TryFrom<Profile> for UserProfile {
 }
 
 #[derive(Identifiable, Queryable, PartialEq, Eq, Debug, Insertable, AsChangeset)]
-#[primary_key(user_id)]
-#[table_name = "user_ids"]
+#[diesel(primary_key(user_id))]
+#[diesel(table_name = user_ids)]
 pub struct UserIdUuid {
     pub user_id: String,
     pub user_uuid: Uuid,
@@ -140,11 +140,11 @@ pub fn trust_for_profile(profile: &Profile) -> TrustType {
 }
 
 macro_rules! user_t {
-    ($user_typ:ident, $table:expr, $display:expr) => {
+    ($user_typ:ident, $table:ident, $display:expr) => {
         #[derive(Identifiable, Queryable, PartialEq, Eq, Debug, Insertable, AsChangeset)]
-        #[primary_key(user_uuid)]
-        #[changeset_options(treat_none_as_null = "true")]
-        #[table_name = $table]
+        #[diesel(primary_key(user_uuid))]
+        #[diesel(treat_none_as_null = true)]
+        #[diesel(table_name = $table)]
         pub struct $user_typ {
             pub user_uuid: Uuid,
             pub picture: Option<String>,
@@ -209,15 +209,15 @@ pub struct UserForGroup {
     pub invited: bool,
 }
 
-user_t!(UsersStaff, "users_staff", Display::Staff);
-user_t!(UsersNdaed, "users_ndaed", Display::Ndaed);
-user_t!(UsersVouched, "users_vouched", Display::Vouched);
+user_t!(UsersStaff, users_staff, Display::Staff);
+user_t!(UsersNdaed, users_ndaed, Display::Ndaed);
+user_t!(UsersVouched, users_vouched, Display::Vouched);
 user_t!(
     UsersAuthenticated,
-    "users_authenticated",
+    users_authenticated,
     Display::Authenticated
 );
-user_t!(UsersPublic, "users_public", Display::Public);
+user_t!(UsersPublic, users_public, Display::Public);
 
 #[cfg(test)]
 mod test {

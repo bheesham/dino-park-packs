@@ -5,7 +5,7 @@ use serde::Serialize;
 use uuid::Uuid;
 
 #[derive(Identifiable, Queryable, PartialEq, Eq, Debug, AsChangeset, Serialize)]
-#[table_name = "groups"]
+#[diesel(table_name = groups)]
 pub struct Group {
     pub id: i32,
     pub name: String,
@@ -20,9 +20,9 @@ pub struct Group {
 }
 
 #[derive(Identifiable, Associations, Queryable, PartialEq, Eq, Debug, Insertable, AsChangeset)]
-#[belongs_to(Group)]
-#[primary_key(group_id)]
-#[table_name = "terms"]
+#[diesel(belongs_to(Group))]
+#[diesel(primary_key(group_id))]
+#[diesel(table_name = terms)]
 pub struct Terms {
     pub group_id: i32,
     pub text: String,
@@ -38,8 +38,8 @@ pub struct Role {
 }
 
 #[derive(Serialize, Queryable, Associations, PartialEq, Eq, Debug, Insertable, AsChangeset)]
-#[belongs_to(Group)]
-#[primary_key(group_id, user_uuid)]
+#[diesel(belongs_to(Group))]
+#[diesel(primary_key(group_id, user_uuid))]
 pub struct Membership {
     pub user_uuid: Uuid,
     pub group_id: i32,
@@ -52,8 +52,8 @@ pub struct Membership {
 #[derive(
     Serialize, Identifiable, Queryable, Associations, PartialEq, Eq, Debug, Insertable, AsChangeset,
 )]
-#[belongs_to(Group)]
-#[primary_key(group_id, user_uuid)]
+#[diesel(belongs_to(Group))]
+#[diesel(primary_key(group_id, user_uuid))]
 pub struct Invitation {
     pub group_id: i32,
     pub user_uuid: Uuid,
@@ -63,8 +63,8 @@ pub struct Invitation {
 }
 
 #[derive(Identifiable, Queryable, Associations, PartialEq, Eq, Debug, Insertable, AsChangeset)]
-#[belongs_to(Group)]
-#[primary_key(group_id)]
+#[diesel(belongs_to(Group))]
+#[diesel(primary_key(group_id))]
 pub struct Invitationtext {
     pub group_id: i32,
     pub body: String,
@@ -73,8 +73,8 @@ pub struct Invitationtext {
 #[derive(
     Serialize, Identifiable, Queryable, Associations, PartialEq, Eq, Debug, Insertable, AsChangeset,
 )]
-#[belongs_to(Group)]
-#[primary_key(group_id, user_uuid)]
+#[diesel(belongs_to(Group))]
+#[diesel(primary_key(group_id, user_uuid))]
 pub struct Request {
     pub group_id: i32,
     pub user_uuid: Uuid,
@@ -91,7 +91,7 @@ pub struct GroupsList {
 }
 
 #[derive(Insertable)]
-#[table_name = "groups"]
+#[diesel(table_name = groups)]
 pub struct InsertGroup {
     pub name: String,
     pub active: bool,
@@ -104,8 +104,8 @@ pub struct InsertGroup {
 }
 
 #[derive(Insertable, AsChangeset)]
-#[table_name = "memberships"]
-#[changeset_options(treat_none_as_null = "true")]
+#[diesel(table_name = memberships)]
+#[diesel(treat_none_as_null = true)]
 pub struct InsertMembership {
     pub user_uuid: Uuid,
     pub group_id: i32,
@@ -115,7 +115,7 @@ pub struct InsertMembership {
 }
 
 #[derive(Insertable)]
-#[table_name = "roles"]
+#[diesel(table_name = roles)]
 pub struct InsertRole {
     pub group_id: i32,
     pub typ: RoleType,
@@ -124,7 +124,7 @@ pub struct InsertRole {
 }
 
 #[derive(Insertable)]
-#[table_name = "requests"]
+#[diesel(table_name = requests)]
 pub struct InsertRequest {
     pub group_id: i32,
     pub user_uuid: Uuid,
