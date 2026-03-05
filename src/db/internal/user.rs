@@ -444,7 +444,7 @@ pub fn all_members(connection: &mut PgConnection) -> Result<Vec<Uuid>, Error> {
 }
 
 use diesel::pg::expression::dsl::array;
-use diesel::pg::types::sql_types::Jsonb;
+use diesel::pg::sql_types::Jsonb;
 use diesel::pg::Pg;
 use diesel::sql_types::Text;
 use serde_json::json;
